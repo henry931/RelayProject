@@ -13,7 +13,7 @@ GPIO.setup(24, GPIO.IN)    # set GPIO 24 as input (CARRY OUT)
 
 #Variables
 CorrectStates = 0
-SleepTime = 1
+SleepTime = 0.1
 
 try:
   	#Try state A=0, B=0, CARRY IN=0
@@ -199,5 +199,9 @@ except:
 	print "Exception Occured"	
 
 finally:
+	print "Turning off outputs"
+	GPIO.output(17, 0)
+        GPIO.output(21, 0)
+        GPIO.output(22, 0)
 	print "Cleaning Up GPIO"
 	GPIO.cleanup()
