@@ -13,7 +13,9 @@ GPIO.setup(24, GPIO.IN)    # set GPIO 24 as input (CARRY OUT)
 
 #Variables
 CorrectStates = 0
-SleepTime = 0.1
+
+#Fastest possible switch time is 13ms before errors
+SleepTime = 0.02
 
 try:
   	#Try state A=0, B=0, CARRY IN=0
