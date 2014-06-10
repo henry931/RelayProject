@@ -3,16 +3,16 @@
 #include <stdio.h>
 
 // Pi Headers
-/*
+
 #include <wiringPi.h>
 #include <mcp23017.h>
 #include <unistd.h>
-*/
+
 
 class ALU {
 
 	// Critical delay in seconds to allow relays to switch 
-	unsigned ClockPeriod = unsigned(0.5);
+	static const unsigned ClockPeriod = unsigned(10000);
 
 	// Serial IO Base Pins
 	static const unsigned IC1 = 100;
@@ -28,7 +28,7 @@ public:
 
 	int SetupInterface(void)
 	{
-		/*
+		
 		// WiringPi setup
 		wiringPiSetup();
 
@@ -52,13 +52,13 @@ public:
 
 		pinMode(ADDR_Carry, INPUT);
 		pullUpDnControl(ADDR_Carry, PUD_UP);
-		*/
+		
 		return 0;
 
 	}
 
 	int ClockALU(void)
-	{/*
+	{
 		// Write to outputs
 		// A & B
 		for (unsigned i = 0; i < 8; i++)
@@ -70,13 +70,13 @@ public:
 		for (unsigned i = 0; i < 3; i++) digitalWrite(ADDR_I[i], Instruction & (1 << i));
 
 		// Wait for relays
-		sleep(ClockPeriod);
+		usleep(ClockPeriod);
 
 		// Read In Result
 		Result = 0;
 		for (unsigned i = 0; i < 8; i++) Result |= digitalRead(ADDR_R[i]) << i;
 		CarryOut = digitalRead(ADDR_Carry);
-		*/
+		
 		return 0;
 
 	}
@@ -84,7 +84,7 @@ public:
 
 // Set pin ordering here - depends on PCB
 const unsigned ALU::ADDR_A[8] = { IC2 + 3, IC2 + 2, IC2 + 5, IC2 + 4, IC1 + 12, IC1 + 11, IC2 + 1, IC2 + 0 };
-const unsigned ALU::ADDR_B[8] = { IC2 + 3, IC2 + 2, IC2 + 5, IC2 + 4, IC1 + 12, IC1 + 11, IC2 + 1, IC2 + 0 };
+const unsigned ALU::ADDR_B[8] = { IC1 + 8, IC1 + 7, IC1 + 10, IC1 + 9, IC1 + 4, IC1 + 3, IC1 + 6, IC1 + 5 };
 const unsigned ALU::ADDR_R[8] = { IC2 + 8, IC2 + 7, IC2 + 6, IC2 + 11, IC2 + 10, IC2 + 9, IC2 + 14, IC2 + 13 };
 const unsigned ALU::ADDR_I[3] = { IC1 + 1, IC1 + 0, IC1 + 2 };
 const unsigned ALU::ADDR_Carry = IC2 + 12;
@@ -124,6 +124,57 @@ int main(void)
 	RelayALU.SetupInterface();
 
 	//Parse assembly text file and load memory
+
+	RelayALU.A = 0;
+	RelayALU.B = 0;
+	RelayALU.Instruction = 0;
+
+	while(1)
+	{
+		if(RelayALU.CarryOut != 1)
+		{
+		RelayALU.A = 255;
+		RelayALU.B = 255;
+		RelayALU.Instruction = 7;
+		}
+		else
+		{
+		RelayALU.A = 0;
+                RelayALU.B = 0;
+                RelayALU.Instruction = 0;
+		}
+		RelayALU.ClockALU();
+	}
+	while(1)
+	{
+		for(unsigned a = 0; a <= 256; a++)
+		{
+			RelayALU.A = a;
+			RelayALU.ClockALU();
+			//RelayALU.A = 0;
+                        //RelayALU.ClockALU();
+		}
+
+		for(unsigned a = 0; a <= 256; a++)
+                {
+                        RelayALU.B = a;
+                        RelayALU.ClockALU();
+                        //RelayALU.A = 0;
+                        //RelayALU.ClockALU();
+                }
+
+		 for(unsigned a = 0; a <= 8; a++)
+                {
+                        RelayALU.Instruction = a;
+                        RelayALU.ClockALU();
+                        //RelayALU.A = 0;
+                        //RelayALU.ClockALU();
+                }
+
+		//for(unsigned b = 0; b < 256; b++)
+                //{
+                //}
+	}
 
 	while (!finished)
 	{
