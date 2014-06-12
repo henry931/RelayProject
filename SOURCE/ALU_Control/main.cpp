@@ -12,11 +12,8 @@
 #include <mcp23017.h>
 #include <unistd.h>
 #endif
-/*
-#include <wiringPi.h>
-#include <mcp23017.h>
-#include <unistd.h>
-*/
+
+#define MEMORY_LEN 4096
 
 // Information level
 static int verbose;
@@ -221,10 +218,21 @@ const unsigned ALU::ADDR_R[8] = { IC2 + 8, IC2 + 7, IC2 + 6, IC2 + 11, IC2 + 10,
 const unsigned ALU::ADDR_I[3] = { IC1 + 1, IC1 + 0, IC1 + 2 };
 const unsigned ALU::ADDR_Carry = IC2 + 12;
 
-int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
+int LoadProgram(const std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 {
+	typedef struct {
+		size_t starts;
+		size_t ends;
+	} argument_t;
+
+	// Labelled indicated a label is used as to indicate the address
+	// Instruction indicates that the line is an instruction
+	std::vector<bool> Labelled(MEMORY_LEN, 0), Instruction(MEMORY_LEN, 0);
+
+	// Isolate specific mnemonics for binary conversion
 	std::string line, label, opcode, destination;
-	const std::string identifier = ":";
+
+	unsigned linecount{};
 
 	std::ifstream ifs(SourceFile);
 	if (!ifs.is_open())
@@ -233,18 +241,61 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 		return -1;
 	}
 
+	// Keep getting lines until EOF
 	while (getline(ifs, line))
 	{
-		std::size_t found = line.find(identifier);
-		if (found = -1)
-			// Case with a label
+
+		// Find whitespace
+		const size_t linelength = line.length();
+		std::vector<bool> whitespace(linelength, 1);
+		for (size_t i{}; i < linelength; i++) if (line.compare(i, 1, " ", 1)) whitespace[i] = 0;
+
+		// Find arguments
+		bool midargument{};
+		//unsigned argumentsfound{};
+		std::vector<argument_t> arguments;
+		// First char
+		if (!whitespace[0])
 		{
+			// Found argument
+			midargument = 1;
+			arguments.push_back(argument_t{ 0 });
+		}
+		// Mid chars
+		for (size_t i = 1; i < linelength; i++)
+		{
+			// Argument begins at i
+			if (whitespace[i - 1] & (!whitespace[i]))
+			{
+				midargument = 1;
+				arguments.push_back(argument_t{ i });
+			}
+
+			// Argument ends at i - 1
+			if ((!whitespace[i - 1]) & whitespace[i])
+			{
+				midargument = 0;
+				arguments.back().ends = i-1;
+			}
+		}
+		//Last char
+		if (midargument) arguments.back().ends = linelength - 1;
+
+		const std::size_t colonpos = line.find(':');
+		if (colonpos == size_t(-1))
+		{
+			// No label found
 		}
 		else
+			
 		{
-			for (unsigned i = 0; i < found; i++) __nop;
+			// Label found
+			Labelled[linecount] = 1;
+
+			for (unsigned i = 0; i < colonpos; i++) __nop;
 		}
 
+		linecount++;
 	}
 
 	ifs.close();
@@ -274,7 +325,7 @@ int main(int argc, char* argv[])
 	}
 
 	// Processor memory 12-bit addressing
-	std::vector<uint16_t> MEMORY(4096);
+	std::vector<uint16_t> MEMORY(MEMORY_LEN, 0);
 
 	// Finished Variable
 	bool finished = 0;
@@ -294,15 +345,16 @@ int main(int argc, char* argv[])
 
 	// Parse assembly text file and load memory
 	const std::string SourceFile = "input.txt";
+	LoadProgram(MEMORY, SourceFile);
 
-	while ((!finished) && (PC < 4096))
+	while ((!finished) && (PC < MEMORY_LEN))
 	{
 		// Get instruction
 		IR = MEMORY[PC];
 
 		// Extract opcode & address
 		opcode = IR >> 12;
-		address = IR & 4095;
+		address = IR & (MEMORY_LEN-1);
 
 		//Execute Instruction
 		switch (opcode) {
