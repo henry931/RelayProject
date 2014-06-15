@@ -15,6 +15,9 @@
 #endif
 
 #define MEMORY_LEN 4096
+#define LOWHALF 255
+#define HIGHHALF 65280
+#define MAXWORD 65535
 
 // Information level
 static int verbose;
@@ -105,6 +108,7 @@ public:
 	{
 		uint16_t tempResult = 0;
 
+		// Simulated equivalents of relay ALU
 		switch (Instruction) {
 			// Add
 		case 0:
@@ -152,6 +156,8 @@ public:
 			// Code
 			break;
 		}
+
+		return 0;
 	}
 
 	int ClockTestALU(void)
@@ -184,6 +190,7 @@ public:
 			return -1;
 		}
 
+		// and carry
 		if (CarryOut != Temp_CarryOut)
 		{
 			const std::bitset<8> expected_bits(CarryOut), actual_bits(Temp_CarryOut), a_bits(A), b_bits(B), instruction_bits(Instruction);
@@ -197,6 +204,7 @@ public:
 			return -1;
 		}
 
+		// Print information depending on debug level
 		if (verbose > 0)
 		{
 			const std::bitset<8> result_bits(Result), carry_bits(CarryOut), a_bits(A), b_bits(B), instruction_bits(Instruction);
@@ -382,7 +390,7 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 		else if (!MemoryBuff[iter].Mnemonic.compare("JGE")) MemoryBuff[iter].Opcode = 5;
 		else if (!MemoryBuff[iter].Mnemonic.compare("JNE")) MemoryBuff[iter].Opcode = 6;
 		else if (!MemoryBuff[iter].Mnemonic.compare("STP")) MemoryBuff[iter].Opcode = 7;
-		//else if (!MemoryBuff[iter].Mnemonic.compare("ADD")) MemoryBuff[iter].Opcode = 8;
+		else if (!MemoryBuff[iter].Mnemonic.compare("MUL")) MemoryBuff[iter].Opcode = 8;
 		else if (!MemoryBuff[iter].Mnemonic.compare("INC")) MemoryBuff[iter].Opcode = 9;
 		else if (!MemoryBuff[iter].Mnemonic.compare("XOR")) MemoryBuff[iter].Opcode = 10;
 		else if (!MemoryBuff[iter].Mnemonic.compare("AND")) MemoryBuff[iter].Opcode = 11;
@@ -456,21 +464,229 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 			MEMORY.back() = (MEMORY.back() & 4095) | (MemoryBuff[iter].Opcode << 12);
 		}
 	}
-	
+
 	return 0;
 }
 
-int GetInstruction(void)
+// Begin control functions for relay ALU
+int ADD(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t> &MEMORY, uint16_t* const address_ptr, uint16_t* const ACC_ptr)
 {
+	// Use lower half as inputs to relay ALU
+	RelayALU_ptr->A = (*ACC_ptr) & LOWHALF;
+	RelayALU_ptr->B = MEMORY[*address_ptr] & LOWHALF;
+	// Use add instruction and execute
+	RelayALU_ptr->Instruction = 0;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	// Set lower half to result
+	(*ACC_ptr) &= HIGHHALF;
+	(*ACC_ptr) |= RelayALU_ptr->Result;
+	// Move higher half into ALU
+	RelayALU_ptr->A = ((*ACC_ptr) & HIGHHALF) >> 8;
+	RelayALU_ptr->B = (MEMORY[*address_ptr] & HIGHHALF) >> 8;
+	// No carry in so use increment operation
+	if (RelayALU_ptr->CarryOut)
+	{
+		RelayALU_ptr->Instruction = 1;
+		(RelayALU_ptr->*ClockTestALU_ptr)();
+		RelayALU_ptr->A = RelayALU_ptr->Result;
+		RelayALU_ptr->Instruction = 0;
+	}
+	// Execute	
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	// Set higher half to result
+	(*ACC_ptr) &= LOWHALF;
+	(*ACC_ptr) |= uint16_t(RelayALU_ptr->Result) << 8;
+
 	return 0;
 }
 
-int TemplateInstruction(ALU *RelayALU, void (ALU::*ClockALU)(), std::vector<uint16_t> &MEMORY, uint16_t &address)
+int INC(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
 {
+	// Lower half increment
+	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	RelayALU_ptr->Instruction = 1;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= HIGHHALF;
+	*ACC_ptr |= RelayALU_ptr->Result;
 
-	// Run instruction through ALU
-	((RelayALU)->*(ClockALU))();
+	// May need to carry in to upper half
+	if (RelayALU_ptr->CarryOut)
+	{
+		RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+		(RelayALU_ptr->*ClockTestALU_ptr)();
+		*ACC_ptr &= LOWHALF;
+		*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
+	}
 
+	return 0;
+}
+
+int XOR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+{
+	// Xor relay instruction
+	RelayALU_ptr->Instruction = 2;
+
+	// Lower half
+	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= HIGHHALF;
+	*ACC_ptr |= RelayALU_ptr->Result;
+
+	// Upper half
+	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= LOWHALF;
+	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
+
+	return 0;
+}
+
+int AND(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+{
+	// And relay instruction
+	RelayALU_ptr->Instruction = 3;
+
+	// Lower half
+	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= HIGHHALF;
+	*ACC_ptr |= RelayALU_ptr->Result;
+
+	// Upper half
+	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= LOWHALF;
+	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
+
+	return 0;
+}
+
+int XNR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+{
+	// Xnor relay instruction
+	RelayALU_ptr->Instruction = 4;
+
+	// Lower half
+	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= HIGHHALF;
+	*ACC_ptr |= RelayALU_ptr->Result;
+
+	// Upper half
+	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= LOWHALF;
+	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
+
+	return 0;
+}
+
+int LOR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+{
+	// Or relay instruction
+	RelayALU_ptr->Instruction = 5;
+
+	// Lower half
+	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= HIGHHALF;
+	*ACC_ptr |= RelayALU_ptr->Result;
+
+	// Upper half
+	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= LOWHALF;
+	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
+
+	return 0;
+}
+
+int NOT(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+{
+	// Not relay instruction
+	RelayALU_ptr->Instruction = 6;
+
+	// Lower half negate
+	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= HIGHHALF;
+	*ACC_ptr |= RelayALU_ptr->Result;
+
+	// Upper half negate
+	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= LOWHALF;
+	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
+
+	return 0;
+}
+
+int ROL(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+{
+	// Rotate relay instruction
+	RelayALU_ptr->Instruction = 7;
+
+	// Lower half rotate
+	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= HIGHHALF;
+	*ACC_ptr |= RelayALU_ptr->Result;
+
+	// Upper half rotate
+	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	(RelayALU_ptr->*ClockTestALU_ptr)();
+	*ACC_ptr &= LOWHALF;
+	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
+
+	// Need to swap two LSBs of 8-bit sub words
+	const bool lowwordbit = bool(*ACC_ptr & 1);
+	const bool highwordbit = bool(*ACC_ptr & (1 << 8));
+	((uint8_t*)ACC_ptr)[0] &= 254;
+	((uint8_t*)ACC_ptr)[0] |= uint8_t(lowwordbit);
+	((uint8_t*)ACC_ptr)[1] &= 254;
+	((uint8_t*)ACC_ptr)[1] |= uint8_t(highwordbit);
+
+	return 0;
+}
+
+int SUB(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t> &MEMORY, uint16_t* const address_ptr, uint16_t* const ACC_ptr)
+{
+	// No intrincsic sub operation so negate argument and add
+	std::vector<uint16_t> buffer(1, MEMORY[*address_ptr]);
+	uint16_t dummyaddress{};
+
+	// Negate
+	NOT(RelayALU_ptr, ClockTestALU_ptr, &(buffer[0]));
+
+	// Increment
+	INC(RelayALU_ptr, ClockTestALU_ptr, &(buffer[0]));
+
+	// Add
+	ADD(RelayALU_ptr, ClockTestALU_ptr, buffer, &dummyaddress, ACC_ptr);
+
+	return 0;
+}
+
+int MUL(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t> &MEMORY, uint16_t* const address_ptr, uint16_t* const ACC_ptr)
+{
+	// Load Buffer
+	std::vector<uint16_t> buffer(1, *ACC_ptr);
+	uint16_t dummyaddress{};
+
+	// Clear Accumulator
+	*ACC_ptr = 0;
+
+	for (size_t iter{}; iter < 16; iter++)
+	{
+		// Multiply buffer by 2
+		// Rotate left
+		ROL(RelayALU_ptr, ClockTestALU_ptr, &(buffer[0]));
+		// Remove lowest bit
+		buffer[0] &= MAXWORD - 1;
+
+		// If Multiplicand bit set, add buffer to ACC
+		if ((MEMORY[*address_ptr] >> iter) & 1) ADD(RelayALU_ptr, ClockTestALU_ptr, buffer, &dummyaddress, ACC_ptr);
+	}
 	return 0;
 }
 
@@ -500,12 +716,18 @@ int main(int argc, char* argv[])
 	// ACC - Accumulator
 	// PC - Current Address
 	uint16_t IR = 0, ACC = 0, PC = 0;
+	uint16_t* const ACC_ptr = &ACC;
 
 	// Instruction to execute	
 	uint16_t address = 0, opcode = 0;
+	uint16_t* const address_ptr = &address;
 
 	// Set up interface
 	ALU RelayALU;
+	ALU* RelayALU_ptr = &RelayALU;
+	int (ALU::*ClockTestALU_ptr)();
+	ClockTestALU_ptr = &(ALU::ClockTestALU);
+
 	RelayALU.SetupInterface();
 
 	// Parse assembly text file and load memory
@@ -520,10 +742,13 @@ int main(int argc, char* argv[])
 		std::cout << "Program size too large! Exiting..." << std::endl;
 	}
 
-	while ((!finished) && (PC < MEMORY_LEN))
+	while ((!finished) && (PC < MEMORY.size()))
 	{
 		// Get instruction
 		IR = MEMORY[PC];
+
+		// Increment program counter
+		PC++;
 
 		// Extract opcode & address
 		opcode = IR >> 12;
@@ -531,29 +756,75 @@ int main(int argc, char* argv[])
 
 		//Execute Instruction
 		switch (opcode) {
-		case 0: break;
-		case 1: break;
-		case 2: break;
-		case 3: break;
-		case 4: break;
-		case 5: break;
-		case 6: break;
-		case 7: break;
-		case 8: break;
-		case 9: break;
-		case 10: break;
-		case 11: break;
-		case 12: break;
-		case 13: break;
-		case 14: break;
-		case 15: break;
+		case 0:
+			// LDA
+			ACC = MEMORY[address];
+			break;
+		case 1:
+			// STO
+			MEMORY[address] = ACC;
+			break;
+		case 2:
+			// ADD
+			ADD(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
+		case 3:
+			// SUB
+			SUB(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
+			break;
+		case 4:
+			// JMP
+			PC = address;
+			break;
+		case 5:
+			// JGE
+			// Jump for positive integer i.e. MSB is 0
+			if (!(ACC & (1 << 16))) PC = address;
+			break;
+		case 6:
+			// JNE
+			// Jump for non zero accumulator
+			if (ACC) PC = address;
+			break;
+		case 7:
+			// STP
+			finished = 1;
+			break;
+		case 8:
+			// MUL
+			MUL(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
+			break;
+		case 9:
+			// INC
+			INC(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			break;
+		case 10:
+			// XOR
+			XOR(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			break;
+		case 11:
+			// AND
+			AND(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			break;
+		case 12:
+			// XNR
+			XNR(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			break;
+		case 13:
+			// LOR
+			LOR(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			break;
+		case 14:
+			// NOT
+			NOT(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			break;
+		case 15:
+			// ROL
+			ROL(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			break;
 		default:
 			// Code
 			break;
 		}
-
-		// Increment program counter
-		PC++;
 	}
 
 	return 0;
