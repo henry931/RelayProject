@@ -717,11 +717,14 @@ int MUL(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t>
 	for (size_t iter{}; iter < 16; iter++)
 	{
 		// Multiply buffer by 2
-		// Rotate left
-		ROL(RelayALU_ptr, ClockTestALU_ptr, &(buffer[0]));
-		// Remove lowest bit
-		buffer[0] &= MAXWORD - 1;
-
+		if (iter)
+		{
+			// Rotate left
+			ROL(RelayALU_ptr, ClockTestALU_ptr, &(buffer[0]));
+			// Remove lowest bit
+			buffer[0] &= MAXWORD - 1;
+		}
+		
 		// If Multiplicand bit set, add buffer to ACC
 		if ((MEMORY[*address_ptr] >> iter) & 1) ADD(RelayALU_ptr, ClockTestALU_ptr, buffer, &dummyaddress, ACC_ptr);
 	}
