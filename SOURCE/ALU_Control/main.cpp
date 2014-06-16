@@ -6,6 +6,7 @@
 #include <string>
 #include <bitset>
 #include <stdexcept>
+#include <ctype.h>
 
 // Pi Headers
 #ifdef __ARMEL__
@@ -355,10 +356,34 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 
 			if (arguments.size() == 2)
 			{
-				// Just a label definition
-				MemoryBuff.push_back(buffer_mem_t{ 1, 0, 0 });
-				MemoryBuff.back().Label = line.substr(arguments[0].starts, arguments[0].ends - arguments[0].starts + 1);
-				MemoryBuff.back().Destination = line.substr(arguments[1].starts, arguments[1].ends - arguments[1].starts + 1);
+				// Label definition OR Instruction without destination
+				// Decide by seeing if argument two is a number or not
+				bool isnumber = 1;
+				for (size_t iter = arguments[1].starts; iter <= arguments[1].ends; iter++)
+				{
+					if (!isdigit(line[iter]))
+					{
+						isnumber = 0;
+						break;
+					}
+				}
+
+				// Label definition
+				if (isnumber)
+				{
+					MemoryBuff.push_back(buffer_mem_t{ 1, 0, 0 });
+					MemoryBuff.back().Label = line.substr(arguments[0].starts, arguments[0].ends - arguments[0].starts + 1);
+					MemoryBuff.back().Destination = line.substr(arguments[1].starts, arguments[1].ends - arguments[1].starts + 1);
+				}
+				// Instruction with label (without destination)
+				else
+				{
+					// Instruction with label
+					MemoryBuff.push_back(buffer_mem_t{ 0, 1, 0 });
+					MemoryBuff.back().Label = line.substr(arguments[0].starts, arguments[0].ends - arguments[0].starts + 1);
+					MemoryBuff.back().Mnemonic = line.substr(arguments[1].starts, arguments[1].ends - arguments[1].starts + 1);
+				}
+
 			}
 			else if (arguments.size() == 3)
 			{
@@ -409,8 +434,13 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 		// If an instruction
 		if (MemoryBuff[iter].LabelledInstruction || MemoryBuff[iter].PlainInstruction)
 		{
-			// If stop opcode, just set literal to zero
-			if (MemoryBuff[iter].Opcode == 7) MemoryBuff[iter].Literal = 0;
+			// If destinationless opcode, just set literal to zero
+			if ((MemoryBuff[iter].Opcode == 7) ||
+				(MemoryBuff[iter].Opcode == 9) ||
+				(MemoryBuff[iter].Opcode == 14) ||
+				(MemoryBuff[iter].Opcode == 15))
+				// Do this
+				MemoryBuff[iter].Literal = 0;
 			else
 			{
 				// Try to convert to int (test for literal)
@@ -521,19 +551,21 @@ int INC(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_p
 	return 0;
 }
 
-int XOR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+int XOR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t> &MEMORY, uint16_t* const address_ptr, uint16_t* const ACC_ptr)
 {
 	// Xor relay instruction
 	RelayALU_ptr->Instruction = 2;
 
 	// Lower half
 	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	RelayALU_ptr->B = MEMORY[*address_ptr] & LOWHALF;
 	(RelayALU_ptr->*ClockTestALU_ptr)();
 	*ACC_ptr &= HIGHHALF;
 	*ACC_ptr |= RelayALU_ptr->Result;
 
 	// Upper half
 	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	RelayALU_ptr->B = (MEMORY[*address_ptr] & HIGHHALF) >> 8;
 	(RelayALU_ptr->*ClockTestALU_ptr)();
 	*ACC_ptr &= LOWHALF;
 	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
@@ -541,19 +573,21 @@ int XOR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_p
 	return 0;
 }
 
-int AND(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+int AND(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t> &MEMORY, uint16_t *address_ptr, uint16_t* const ACC_ptr)
 {
 	// And relay instruction
 	RelayALU_ptr->Instruction = 3;
 
 	// Lower half
 	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	RelayALU_ptr->B = MEMORY[*address_ptr] & LOWHALF;
 	(RelayALU_ptr->*ClockTestALU_ptr)();
 	*ACC_ptr &= HIGHHALF;
 	*ACC_ptr |= RelayALU_ptr->Result;
 
 	// Upper half
 	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	RelayALU_ptr->B = (MEMORY[*address_ptr] & HIGHHALF) >> 8;
 	(RelayALU_ptr->*ClockTestALU_ptr)();
 	*ACC_ptr &= LOWHALF;
 	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
@@ -561,19 +595,21 @@ int AND(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_p
 	return 0;
 }
 
-int XNR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+int XNR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t> &MEMORY, uint16_t* const address_ptr, uint16_t* const ACC_ptr)
 {
 	// Xnor relay instruction
 	RelayALU_ptr->Instruction = 4;
 
 	// Lower half
 	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	RelayALU_ptr->B = MEMORY[*address_ptr] & LOWHALF;
 	(RelayALU_ptr->*ClockTestALU_ptr)();
 	*ACC_ptr &= HIGHHALF;
 	*ACC_ptr |= RelayALU_ptr->Result;
 
 	// Upper half
 	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	RelayALU_ptr->B = (MEMORY[*address_ptr] & HIGHHALF) >> 8;
 	(RelayALU_ptr->*ClockTestALU_ptr)();
 	*ACC_ptr &= LOWHALF;
 	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
@@ -581,19 +617,21 @@ int XNR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_p
 	return 0;
 }
 
-int LOR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_ptr)
+int LOR(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t> &MEMORY, uint16_t* const address_ptr, uint16_t* const ACC_ptr)
 {
 	// Or relay instruction
 	RelayALU_ptr->Instruction = 5;
 
 	// Lower half
 	RelayALU_ptr->A = *ACC_ptr & LOWHALF;
+	RelayALU_ptr->B = MEMORY[*address_ptr] & LOWHALF;
 	(RelayALU_ptr->*ClockTestALU_ptr)();
 	*ACC_ptr &= HIGHHALF;
 	*ACC_ptr |= RelayALU_ptr->Result;
 
 	// Upper half
 	RelayALU_ptr->A = (*ACC_ptr & HIGHHALF) >> 8;
+	RelayALU_ptr->B = (MEMORY[*address_ptr] & HIGHHALF) >> 8;
 	(RelayALU_ptr->*ClockTestALU_ptr)();
 	*ACC_ptr &= LOWHALF;
 	*ACC_ptr |= uint16_t(RelayALU_ptr->Result) << 8;
@@ -641,10 +679,10 @@ int ROL(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), uint16_t* const ACC_p
 	// Need to swap two LSBs of 8-bit sub words
 	const bool lowwordbit = bool(*ACC_ptr & 1);
 	const bool highwordbit = bool(*ACC_ptr & (1 << 8));
-	((uint8_t*)ACC_ptr)[0] &= 254;
-	((uint8_t*)ACC_ptr)[0] |= uint8_t(lowwordbit);
-	((uint8_t*)ACC_ptr)[1] &= 254;
-	((uint8_t*)ACC_ptr)[1] |= uint8_t(highwordbit);
+	// Clear bits
+	*ACC_ptr &= 65278;
+	*ACC_ptr |= uint16_t(highwordbit);
+	*ACC_ptr |= uint16_t(lowwordbit) << 8;
 
 	return 0;
 }
@@ -731,7 +769,7 @@ int main(int argc, char* argv[])
 	RelayALU.SetupInterface();
 
 	// Parse assembly text file and load memory
-	const std::string SourceFile = "input.txt";
+	const std::string SourceFile = "test.txt";
 	LoadProgram(MEMORY, SourceFile);
 
 	// Check memory usage
@@ -767,6 +805,7 @@ int main(int argc, char* argv[])
 		case 2:
 			// ADD
 			ADD(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
+			break;
 		case 3:
 			// SUB
 			SUB(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
@@ -778,7 +817,7 @@ int main(int argc, char* argv[])
 		case 5:
 			// JGE
 			// Jump for positive integer i.e. MSB is 0
-			if (!(ACC & (1 << 16))) PC = address;
+			if (!(ACC & (1 << 15))) PC = address;
 			break;
 		case 6:
 			// JNE
@@ -799,19 +838,19 @@ int main(int argc, char* argv[])
 			break;
 		case 10:
 			// XOR
-			XOR(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			XOR(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 11:
 			// AND
-			AND(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			AND(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 12:
 			// XNR
-			XNR(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			XNR(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 13:
 			// LOR
-			LOR(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
+			LOR(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 14:
 			// NOT
