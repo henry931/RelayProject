@@ -12,7 +12,7 @@
 class ALU {
 
 	// Critical delay in seconds to allow relays to switch 
-	static const unsigned ClockPeriod = unsigned(10000);
+	static const unsigned ClockPeriod = unsigned(100000);
 
 	// Serial IO Base Pins
 	static const unsigned IC1 = 100;
@@ -129,7 +129,7 @@ int main(void)
 	RelayALU.B = 0;
 	RelayALU.Instruction = 0;
 
-	while(1)
+/*	while(1)
 	{
 		if(RelayALU.CarryOut != 1)
 		{
@@ -145,7 +145,25 @@ int main(void)
 		}
 		RelayALU.ClockALU();
 	}
-	while(1)
+*/
+	for(size_t iin{}; iin < 8; iin ++)
+	{
+		RelayALU.Instruction = iin;
+		
+		for(size_t ain{}; ain < 256; ain ++)
+        	{
+			 RelayALU.A = ain;
+
+			for(size_t bin{}; bin < 256; bin ++)
+                	{
+                  		RelayALU.B = bin;
+
+				RelayALU.ClockALU();
+                	}             
+        	}
+	}
+
+	while(0)
 	{
 		for(unsigned a = 0; a <= 256; a++)
 		{

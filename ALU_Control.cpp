@@ -349,11 +349,11 @@ int main(int argc, char* argv[])
         {
                 RelayALU.Instruction = iin;
                 
-                for(size_t ain{255}; ain > 0; ain --)
+                for(size_t ain{}; ain < 256; ain ++)
                 {
                          RelayALU.A = ain;
 
-                        for(size_t bin{255}; bin > 0; bin --)
+                        for(size_t bin{}; bin < 256; bin ++)
                         {
                                 RelayALU.B = bin;
 

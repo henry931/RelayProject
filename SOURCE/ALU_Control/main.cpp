@@ -34,15 +34,13 @@ class ALU {
 
 public:
 
-	// Clock frequency Hz
-	double ClockFrequency{ 60 };
 	// Critical delay in microseconds to allow relays to switch 
-	unsigned ClockPeriod = unsigned(1000000 / ClockFrequency);
+	unsigned ClockPeriod;
 
 	// Variables for input and output
 	uint8_t A, B, Instruction, Result, CarryOut;
 
-	ALU() : A(0), B(0), Instruction(0), Result(0), CarryOut(0)
+	ALU() : A(0), B(0), Instruction(0), Result(0), CarryOut(0), ClockPeriod{100000}
 	{
 	}
 
@@ -431,6 +429,7 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 	// Match up labels and convert to addresses
 	for (size_t iter{}; iter < MemoryBuff.size(); iter++)
 	{
+std::cout << iter << std::endl;
 		// If an instruction
 		if (MemoryBuff[iter].LabelledInstruction || MemoryBuff[iter].PlainInstruction)
 		{
@@ -454,9 +453,16 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 					for (size_t inner{}; inner < MemoryBuff.size(); inner++)
 					{
 						// Find label
+
+std::cout << inner << std::endl;
+std::cout << MemoryBuff[iter].Destination << std::endl;
+std::cout << MemoryBuff[inner].Label << std::endl;
+std::cout << MemoryBuff[iter].Destination.compare(MemoryBuff[inner].Label) << std::endl;
+
 						if (!MemoryBuff[iter].Destination.compare(MemoryBuff[inner].Label))
 						{
 							MemoryBuff[iter].Literal = MemoryBuff[inner].Address;
+std::cout << MemoryBuff[iter].Literal << std::endl;
 							break;
 						}
 						// Label not found
@@ -487,6 +493,7 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 	{
 		// Set whole word to literal
 		MEMORY.push_back(MemoryBuff[iter].Literal);
+std::cout << MemoryBuff[iter].Literal << std::endl;
 
 		// If an instruction the four MSBs are the opcode
 		if (MemoryBuff[iter].LabelledInstruction || MemoryBuff[iter].PlainInstruction)
@@ -501,6 +508,7 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 // Begin control functions for relay ALU
 int ADD(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t> &MEMORY, uint16_t* const address_ptr, uint16_t* const ACC_ptr)
 {
+
 	// Use lower half as inputs to relay ALU
 	RelayALU_ptr->A = (*ACC_ptr) & LOWHALF;
 	RelayALU_ptr->B = MEMORY[*address_ptr] & LOWHALF;
@@ -767,7 +775,7 @@ int main(int argc, char* argv[])
 	ALU RelayALU;
 	ALU* RelayALU_ptr = &RelayALU;
 	int (ALU::*ClockTestALU_ptr)();
-	ClockTestALU_ptr = &(ALU::ClockTestALU);
+	ClockTestALU_ptr = &ALU::ClockTestALU;
 
 	RelayALU.SetupInterface();
 
@@ -795,6 +803,13 @@ int main(int argc, char* argv[])
 		opcode = IR >> 12;
 		address = IR & (MEMORY_LEN - 1);
 
+		std::cout << "IR:  " << IR << std::endl;
+		std::cout << "OP:  " << opcode << std::endl;
+		std::cout << "ADDR:" << address << std::endl;
+		std::cout << "PC:  " << PC << std::endl;
+		std::cout << "ACC: " << ACC << std::endl;
+		std::cout << std::endl;
+
 		//Execute Instruction
 		switch (opcode) {
 		case 0:
@@ -808,7 +823,9 @@ int main(int argc, char* argv[])
 		case 2:
 			// ADD
 			ADD(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
-			break;
+			
+std::cout << "Adding..." << std::endl;
+break;
 		case 3:
 			// SUB
 			SUB(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
