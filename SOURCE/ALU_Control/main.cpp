@@ -40,7 +40,7 @@ public:
 	// Variables for input and output
 	uint8_t A, B, Instruction, Result, CarryOut;
 
-	ALU() : A(0), B(0), Instruction(0), Result(0), CarryOut(0), ClockPeriod{100000}
+	ALU() : A(0), B(0), Instruction(0), Result(0), CarryOut(0), ClockPeriod{ 100000 }
 	{
 	}
 
@@ -429,7 +429,7 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 	// Match up labels and convert to addresses
 	for (size_t iter{}; iter < MemoryBuff.size(); iter++)
 	{
-std::cout << iter << std::endl;
+		std::cout << iter << std::endl;
 		// If an instruction
 		if (MemoryBuff[iter].LabelledInstruction || MemoryBuff[iter].PlainInstruction)
 		{
@@ -453,16 +453,9 @@ std::cout << iter << std::endl;
 					for (size_t inner{}; inner < MemoryBuff.size(); inner++)
 					{
 						// Find label
-
-std::cout << inner << std::endl;
-std::cout << MemoryBuff[iter].Destination << std::endl;
-std::cout << MemoryBuff[inner].Label << std::endl;
-std::cout << MemoryBuff[iter].Destination.compare(MemoryBuff[inner].Label) << std::endl;
-
 						if (!MemoryBuff[iter].Destination.compare(MemoryBuff[inner].Label))
 						{
 							MemoryBuff[iter].Literal = MemoryBuff[inner].Address;
-std::cout << MemoryBuff[iter].Literal << std::endl;
 							break;
 						}
 						// Label not found
@@ -493,7 +486,6 @@ std::cout << MemoryBuff[iter].Literal << std::endl;
 	{
 		// Set whole word to literal
 		MEMORY.push_back(MemoryBuff[iter].Literal);
-std::cout << MemoryBuff[iter].Literal << std::endl;
 
 		// If an instruction the four MSBs are the opcode
 		if (MemoryBuff[iter].LabelledInstruction || MemoryBuff[iter].PlainInstruction)
@@ -732,7 +724,7 @@ int MUL(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t>
 			// Remove lowest bit
 			buffer[0] &= MAXWORD - 1;
 		}
-		
+
 		// If Multiplicand bit set, add buffer to ACC
 		if ((MEMORY[*address_ptr] >> iter) & 1) ADD(RelayALU_ptr, ClockTestALU_ptr, buffer, &dummyaddress, ACC_ptr);
 	}
@@ -823,9 +815,7 @@ int main(int argc, char* argv[])
 		case 2:
 			// ADD
 			ADD(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
-			
-std::cout << "Adding..." << std::endl;
-break;
+			break;
 		case 3:
 			// SUB
 			SUB(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);

@@ -35,8 +35,33 @@ void MergeNodes(std::vector<uint64_t>* Matrix, ZeroVector MergeVector, uint64_t 
 	}
 }
 
+// From: http://stackoverflow.com/questions/15301885/calculate-value-of-n-choose-k
+uint64_t NChooseK(uint64_t n, uint64_t k){
+
+	if (k == 0) return 1;
+
+	return (n * NChooseK(n - 1, k - 1)) / k;
+}
+
+
 int main()
 {
+	// Scope of problem size calculation
+	uint64_t EndTarget = 24;
+	std::vector<uint64_t> Result(EndTarget);
+
+	Result[0] = 1;
+
+	// Iterate
+	for (uint64_t i = 0; i < EndTarget - 1; i++)
+	{
+		uint64_t Summation = 0;
+
+		for (uint64_t j = 0; j <= i; j++) Summation += Result[j] * NChooseK(i, j);
+
+		Result[i + 1] = Result[i] + Summation;
+	}
+
 	// Number of total nodes
 	// Max 64 for this program
 	uint64_t Nodes = 10;
@@ -53,7 +78,8 @@ int main()
 	// Form the net matrix - each vector element represents a row
 	// Outer vector is number of total matrices
 	std::vector<std::vector<uint64_t> > Matrices(1, std::vector<uint64_t>(Nodes));
-
+	// Number of results known, preallocate memory
+	Matrices.reserve(Result[Nodes]);
 	// Get address of working matrix
 	uint64_t* CurrentMatrix = &Matrices[0][0];
 
@@ -121,7 +147,7 @@ int main()
 				unsigned MatrixUnique = 1;
 				for (uint64_t i = IterStartIndex[iter]; i <= IterEndIndex[iter]; i++)
 				{
-					unsigned MatrixNotUnique = 1;
+					/*unsigned MatrixNotUnique = 1;
 					for (uint64_t rowcheck = 0; rowcheck < Nodes; rowcheck++)
 					{
 						if (BufferMatrix[rowcheck] != Matrices[i][rowcheck])
@@ -134,12 +160,12 @@ int main()
 					{
 						MatrixUnique = 0;
 						break;
-					}
-				/*	if (BufferMatrix == Matrices[i])
-					{
-						MatrixUnique = 0;
-						break;
 					}*/
+						if (BufferMatrix == Matrices[i])
+					{
+					MatrixUnique = 0;
+					break;
+					}
 				}
 
 				if (MatrixUnique == 1)
@@ -148,6 +174,8 @@ int main()
 					IterEndIndex[iter]++;
 					// -> Copy to this iteration space...
 					Matrices.push_back(BufferMatrix);
+					// check iof finished
+					if (Matrices.size() == Result[Nodes]) break;
 				}
 
 				// Update end index
@@ -157,4 +185,6 @@ int main()
 		}
 	}
 	std::cout << "Matrix Size: " << Matrices.size() << std::endl;
+
+	return 0;
 }
