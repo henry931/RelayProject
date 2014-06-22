@@ -9,6 +9,11 @@ SOURCE Directory
 * ProblemSize calculates the Bell number series
 * SimulationTesting is a program that reads in the CSV output of the LTspice Relay ALU simulation, and checks the results against the expected operation for that combinatorial state.
 
+RelayALUEagleFiles.zip
+----------------------
+Contains all eagle schematics, boards, and library files associated with the project.
+
+
   [1]: http://www.cs.man.ac.uk/~pjj/cs1001/arch/node1.html        "MU0"
   [2]: http://wiringpi.com/        "WiringPi"
   [3]: http://mathworld.wolfram.com/BellNumber.html        "Bell number"
