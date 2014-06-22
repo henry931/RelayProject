@@ -13,6 +13,10 @@ RelayALUEagleFiles.zip
 ----------------------
 Contains all eagle schematics, boards, and library files associated with the project.
 
+LTspice.zip
+-----------
+Contains all LTspice designs and schematics for simulation purposes.
+
 
   [1]: http://www.cs.man.ac.uk/~pjj/cs1001/arch/node1.html        "MU0"
   [2]: http://wiringpi.com/        "WiringPi"
