@@ -1,0 +1,63 @@
+loop: LDA x
+ADD y
+ADD y
+ADD y
+ADD y
+ADD y
+ADD y
+STO d
+LDA z
+SUB po
+JMP hello
+STP
+hello: LDA oqe
+MUL malwe
+LDA msblow
+JGE yay
+STP
+yay: LDA msbhigh
+JGE end
+LDA zero
+JNE end
+LDA msbhigh
+JNE again
+STP
+again: LDA big
+INC
+NOT
+XOR big2
+NOT
+AND big3
+LOR big4
+XNR big
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+ROL
+end: STP
+x: 4573
+y: 9257
+z: 25539
+d: 0
+po: 11111
+oqe: 213
+malwe: 101
+msblow: 32767
+msbhigh: 32768
+zero: 0
+big: 52312
+big2: 12345
+big3: 54321
+big4: 45239

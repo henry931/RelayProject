@@ -1,0 +1,14 @@
+start: LDA this
+loopa: STO previousa
+ADD previousb
+STO this
+JGE loopb
+STP
+loopb: STO previousb
+ADD previousa
+STO this
+JGE loopa
+STP
+this: 1
+previousa: 0
+previousb: 0

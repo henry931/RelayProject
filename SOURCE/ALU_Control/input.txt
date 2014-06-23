@@ -1,0 +1,12 @@
+loop: LDA x
+ADD y
+STO x
+LDA z
+SUB one
+STO z
+JNE loop
+STP
+x: 0
+y: 4
+z: 3
+one: 1
