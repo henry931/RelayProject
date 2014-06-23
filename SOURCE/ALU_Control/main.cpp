@@ -74,13 +74,14 @@ void clearscreen()
 	/* Move the cursor home */
 	SetConsoleCursorPosition(hStdOut, homeCoords);
 }
+#endif
+
 // http://www.cplusplus.com/forum/beginner/1988/
 void pause()
-{ 
+{
 	std::cout << "Press ENTER to continue...";
 	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
-#endif
 
 #define MEMORY_LEN 4096
 #define LOWHALF 255
