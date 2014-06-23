@@ -7,18 +7,84 @@
 #include <bitset>
 #include <stdexcept>
 #include <ctype.h>
+#include <iomanip>
 
 // Pi Headers
 #ifdef __ARMEL__
 #include <wiringPi.h>
 #include <mcp23017.h>
 #include <unistd.h>
+#include <term.h>
+
+// From: http://www.cplusplus.com/articles/4z18T05o/
+void clearscreen()
+{
+	if (!cur_term)
+	{
+		int result;
+		setupterm(NULL, STDOUT_FILENO, &result);
+		if (result <= 0) return;
+	}
+
+	putp(tigetstr("clear"));
+}
+#endif
+
+// Windows
+#ifdef WIN32
+#define NOMINMAX
+#include <windows.h>
+#include <limits>
+// From: http://www.cplusplus.com/articles/4z18T05o/
+// To avoid system calls
+void clearscreen()
+{
+	HANDLE                     hStdOut;
+	CONSOLE_SCREEN_BUFFER_INFO csbi;
+	DWORD                      count;
+	DWORD                      cellCount;
+	COORD                      homeCoords = { 0, 0 };
+
+	hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (hStdOut == INVALID_HANDLE_VALUE) return;
+
+	/* Get the number of cells in the current buffer */
+	if (!GetConsoleScreenBufferInfo(hStdOut, &csbi)) return;
+	cellCount = csbi.dwSize.X *csbi.dwSize.Y;
+
+	/* Fill the entire buffer with spaces */
+	if (!FillConsoleOutputCharacter(
+		hStdOut,
+		(TCHAR) ' ',
+		cellCount,
+		homeCoords,
+		&count
+		)) return;
+
+	/* Fill the entire buffer with the current colors and attributes */
+	if (!FillConsoleOutputAttribute(
+		hStdOut,
+		csbi.wAttributes,
+		cellCount,
+		homeCoords,
+		&count
+		)) return;
+
+	/* Move the cursor home */
+	SetConsoleCursorPosition(hStdOut, homeCoords);
+}
+// http://www.cplusplus.com/forum/beginner/1988/
+void pause()
+{ 
+	std::cout << "Press ENTER to continue...";
+	std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
 #endif
 
 #define MEMORY_LEN 4096
 #define LOWHALF 255
 #define HIGHHALF 65280
-#define MAXWORD 65535
+#define MU0MAXWORD 65535
 
 // Information level
 static int verbose;
@@ -265,6 +331,8 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 	// Keep getting lines until EOF
 	while (getline(ifs, line))
 	{
+		//Remove windows line endings for Pi
+		if (line.back() == 0x0D) line.pop_back();
 
 		// Find whitespace
 		const size_t linelength = line.length();
@@ -306,6 +374,8 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 		if (colonpos != line.rfind(':'))
 		{
 			// Complain
+			std::wcout << "Error: More than one colon in line " << MemoryBuff.size() << std::endl;
+			return -1;
 		}
 		if (colonpos == size_t(-1))
 		{
@@ -328,8 +398,9 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 			}
 			else
 			{
-				// Must have two arguments
-				// Throw tantrum
+				// Must have one or two arguments
+				std::wcout << "Error: Bad number of arguments in line " << MemoryBuff.size() << std::endl;
+				return -1;
 			}
 
 		}
@@ -340,7 +411,8 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 			if ((colonpos != arguments[0].ends) && (colonpos != arguments[1].starts))
 			{
 				// Colon in forbidden position
-				// Error
+				std::wcout << "Error: Colon in bad position in line " << MemoryBuff.size() << std::endl;
+				return -1;
 			}
 
 			//Remove colon reference
@@ -393,7 +465,8 @@ int LoadProgram(std::vector<uint16_t> &MEMORY, const std::string &SourceFile)
 			}
 			else
 			{
-				// Throw tantrum
+				std::wcout << "Error: Bad number of instruction in line " << MemoryBuff.size() << std::endl;
+				return -1;
 			}
 		}
 	}
@@ -722,12 +795,56 @@ int MUL(ALU *RelayALU_ptr, int (ALU::*ClockTestALU_ptr)(), std::vector<uint16_t>
 			// Rotate left
 			ROL(RelayALU_ptr, ClockTestALU_ptr, &(buffer[0]));
 			// Remove lowest bit
-			buffer[0] &= MAXWORD - 1;
+			buffer[0] &= MU0MAXWORD - 1;
 		}
 
 		// If Multiplicand bit set, add buffer to ACC
 		if ((MEMORY[*address_ptr] >> iter) & 1) ADD(RelayALU_ptr, ClockTestALU_ptr, buffer, &dummyaddress, ACC_ptr);
 	}
+	return 0;
+}
+
+int printstack(std::vector<uint16_t> &MEMORY, size_t START, size_t MAXLINES)
+{
+	// Start is origin to print around
+	// MAXLINES is number of addresses either side to print
+
+	int memlinesbefore = START;
+	int memlinesafter = MEMORY.size() - START;
+
+	if (memlinesafter < 0) return -1;
+
+	if (memlinesbefore > MAXLINES) memlinesbefore = MAXLINES;
+	if (memlinesafter > MAXLINES) memlinesafter = MAXLINES;
+
+	std::cout << "       Stack (Hex)" << std::hex << std::endl;
+	std::cout << "       ADDR [ADDR]" << std::hex << std::endl;
+
+	for (size_t iter = START - memlinesbefore; iter < START; iter++)
+	{
+		std::cout << "       " << std::setfill('0') << std::setw(4) << iter << "  " << std::setfill('0') << std::setw(4) << MEMORY[iter] << std::endl;
+	}
+
+	std::cout << "-----> " << std::setfill('0') << std::setw(4) << START << "  " << std::setfill('0') << std::setw(4) << MEMORY[START] << std::endl;
+
+	if (memlinesafter < 1)
+	{
+		std::cout << std::endl;
+		return 0;
+	}
+
+	for (size_t iter = START + 1; iter < START + memlinesafter; iter++)
+	{
+		std::cout << "       " << std::setfill('0') << std::setw(4) << iter << "  " << std::setfill('0') << std::setw(4) << MEMORY[iter] << std::endl;
+	}
+	std::cout << std::endl;
+	return 0;
+}
+
+int printstack(std::vector<uint16_t> &MEMORY, size_t START)
+{
+	size_t DefaultLines = 10;
+	printstack(MEMORY, START, DefaultLines);
 	return 0;
 }
 
@@ -773,7 +890,11 @@ int main(int argc, char* argv[])
 
 	// Parse assembly text file and load memory
 	const std::string SourceFile = "test.txt";
-	LoadProgram(MEMORY, SourceFile);
+	if (LoadProgram(MEMORY, SourceFile))
+	{
+		std::cout << "Error loading program. Exiting..." << std::endl;
+		return -1;
+	}
 
 	// Check memory usage
 	std::cout << "Memory usage is " << MEMORY.size() * 2 << " out of 8192 bytes" << std::endl;
@@ -785,6 +906,13 @@ int main(int argc, char* argv[])
 
 	while ((!finished) && (PC < MEMORY.size()))
 	{
+		// Clear Console
+		clearscreen();
+
+		// Print Stack
+		printstack(MEMORY, PC);
+		std::cout << std::dec;
+
 		// Get instruction
 		IR = MEMORY[PC];
 
@@ -795,85 +923,131 @@ int main(int argc, char* argv[])
 		opcode = IR >> 12;
 		address = IR & (MEMORY_LEN - 1);
 
-		std::cout << "IR:  " << IR << std::endl;
-		std::cout << "OP:  " << opcode << std::endl;
-		std::cout << "ADDR:" << address << std::endl;
-		std::cout << "PC:  " << PC << std::endl;
-		std::cout << "ACC: " << ACC << std::endl;
+		// Get bitsets
+		std::bitset<16> IR_bits(IR), OP_bits(opcode), ADDR_bits(address), PC_bits(PC), ACC_bits(ACC), TARGET_bits(MEMORY[address]);
+
+		// Print Status
+		std::cout << "       Bin              Dec   Hex" << std::endl;
+		std::cout << "IR:    " << IR_bits << " " << std::setfill('0') << std::setw(5) << std::dec << IR << " " << std::setw(4) << std::hex << IR << std::endl;
+		std::cout << "OP:    " << OP_bits << " " << std::setfill('0') << std::setw(5) << std::dec << opcode << " " << std::setw(4) << std::hex << opcode << std::endl;
+		std::cout << "ADDR:  " << ADDR_bits << " " << std::setfill('0') << std::setw(5) << std::dec << address << " " << std::setw(4) << std::hex << address << std::endl;
+		std::cout << "PC:    " << PC_bits << " " << std::setfill('0') << std::setw(5) << std::dec << PC << " " << std::setw(4) << std::hex << PC << std::endl;
+		std::cout << "ACC:   " << ACC_bits << " " << std::setfill('0') << std::setw(5) << std::dec << ACC << " " << std::setw(4) << std::hex << ACC << std::endl;
 		std::cout << std::endl;
 
 		//Execute Instruction
 		switch (opcode) {
 		case 0:
 			// LDA
+			std::cout << "LDA" << std::endl;
 			ACC = MEMORY[address];
 			break;
 		case 1:
 			// STO
+			std::cout << "STO" << std::endl;
 			MEMORY[address] = ACC;
 			break;
 		case 2:
 			// ADD
+			std::cout << "ADD" << std::endl;
+			std::cout << "[S]:   " << TARGET_bits << " " << std::setfill('0') << std::setw(5) << std::dec << MEMORY[address] << " " << std::setw(4) << std::hex << MEMORY[address] << std::endl;
 			ADD(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 3:
 			// SUB
+			std::cout << "SUB" << std::endl;
+			std::cout << "[S]:   " << TARGET_bits << " " << std::setfill('0') << std::setw(5) << std::dec << MEMORY[address] << " " << std::setw(4) << std::hex << MEMORY[address] << std::endl;
 			SUB(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 4:
 			// JMP
+			std::cout << "JMP" << std::endl;
 			PC = address;
 			break;
 		case 5:
 			// JGE
+			std::cout << "JGE" << std::endl;
 			// Jump for positive integer i.e. MSB is 0
-			if (!(ACC & (1 << 15))) PC = address;
+			if (!(ACC & (1 << 15)))
+			{
+				PC = address;
+				std::cout << "PC Updated: " << std::dec << PC << std::endl;
+			}
+			else std::cout << "Not Jumping" << std::endl;
 			break;
 		case 6:
 			// JNE
 			// Jump for non zero accumulator
-			if (ACC) PC = address;
+			std::cout << "JNE" << std::endl;
+			if (ACC)
+			{
+				PC = address;
+				std::cout << "PC Updated: " << std::dec << PC << std::endl;
+			}
+			else std::cout << "Not Jumping" << std::endl;
 			break;
 		case 7:
 			// STP
+			std::cout << "STP" << std::endl;
 			finished = 1;
 			break;
 		case 8:
 			// MUL
+			std::cout << "MUL" << std::endl;
+			std::cout << "[S]:   " << TARGET_bits << " " << std::setfill('0') << std::setw(5) << std::dec << MEMORY[address] << " " << std::setw(4) << std::hex << MEMORY[address] << std::endl;
 			MUL(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 9:
 			// INC
+			std::cout << "INC" << std::endl;
 			INC(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
 			break;
 		case 10:
 			// XOR
+			std::cout << "XOR" << std::endl;
+			std::cout << "[S]:   " << TARGET_bits << " " << std::setfill('0') << std::setw(5) << std::dec << MEMORY[address] << " " << std::setw(4) << std::hex << MEMORY[address] << std::endl;
 			XOR(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 11:
 			// AND
+			std::cout << "AND" << std::endl;
+			std::cout << "[S]:   " << TARGET_bits << " " << std::setfill('0') << std::setw(5) << std::dec << MEMORY[address] << " " << std::setw(4) << std::hex << MEMORY[address] << std::endl;
 			AND(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 12:
 			// XNR
+			std::cout << "XNR" << std::endl;
+			std::cout << "[S]:   " << TARGET_bits << " " << std::setfill('0') << std::setw(5) << std::dec << MEMORY[address] << " " << std::setw(4) << std::hex << MEMORY[address] << std::endl;
 			XNR(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 13:
 			// LOR
+			std::cout << "LOR" << std::endl;
+			std::cout << "[S]:   " << TARGET_bits << " " << std::setfill('0') << std::setw(5) << std::dec << MEMORY[address] << " " << std::setw(4) << std::hex << MEMORY[address] << std::endl;
 			LOR(RelayALU_ptr, ClockTestALU_ptr, MEMORY, address_ptr, ACC_ptr);
 			break;
 		case 14:
 			// NOT
+			std::cout << "NOT" << std::endl;
 			NOT(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
 			break;
 		case 15:
 			// ROL
+			std::cout << "ROL" << std::endl;
 			ROL(RelayALU_ptr, ClockTestALU_ptr, ACC_ptr);
 			break;
 		default:
 			// Code
 			break;
 		}
+
+		// Print updated ACC
+		ACC_bits = ACC;
+		std::cout << "ACC -> " << ACC_bits << " " << std::setfill('0') << std::setw(5) << std::dec << ACC << " " << std::setw(4) << std::hex << ACC << std::endl;
+		std::cout << std::endl;
+
+		pause();
+
 	}
 
 	return 0;
