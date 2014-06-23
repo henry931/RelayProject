@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <ctype.h>
 #include <iomanip>
+#include <algorithm>
 
 // Pi Headers
 #ifdef __ARMEL__
@@ -848,20 +849,63 @@ int printstack(std::vector<uint16_t> &MEMORY, size_t START)
 	return 0;
 }
 
+// From: http://stackoverflow.com/questions/865668/parse-command-line-arguments
+char* getCmdOption(char ** begin, char ** end, const std::string & option)
+{
+	char ** itr = std::find(begin, end, option);
+	if (itr != end && ++itr != end)
+	{
+		return *itr;
+	}
+	return 0;
+}
+
+bool cmdOptionExists(char** begin, char** end, const std::string& option)
+{
+	return std::find(begin, end, option) != end;
+}
+
+
 int main(int argc, char* argv[])
 {
-	if (argc > 1)
+	// Look for file name
+	char * filename = getCmdOption(argv, argv + argc, "-f");
+	std::string SourceFile;
+	if (filename)
 	{
-		try
-		{
-			verbose = std::stoi(argv[1]);
-		}
-		catch (const std::invalid_argument &ia)
-		{
-			std::cout << "Invalid argument for verbose level" << ia.what() << std::endl;
-			verbose = 0;
-		}
+		SourceFile = filename;
+		std::cout << "Found text file: " << SourceFile << std::endl;
 	}
+	else
+	{
+		SourceFile = "input.txt";
+		std::cout << "Text file not found/given, trying: " << SourceFile << std::endl;
+	}
+	std::cout << std::endl;
+
+	// Look for clock speed
+	char * clockchararray = getCmdOption(argv, argv + argc, "-c");
+	double clockfrequency = 0;
+	if (clockchararray)
+	{
+		clockfrequency = strtod(clockchararray, NULL);
+		std::cout << "Input Clock Frequency: " << clockfrequency << "Hz" << std::endl;
+	}
+	else
+	{
+		std::cout << "Clock Frequency not found/given, assuming manual clock" << std::endl;
+	}
+
+	if (clockfrequency < 0)
+	{
+		std::cout << "Negative clock frequency, ignoring" << std::endl;
+		clockfrequency = 0;
+	}
+	else if (clockfrequency > 10) std::cout << "Warning, Clock frequency may be too high" << std::endl;
+
+	std::cout << std::endl;
+
+	pause();
 
 	// Processor memory 12-bit addressing
 	std::vector<uint16_t> MEMORY;
@@ -887,9 +931,9 @@ int main(int argc, char* argv[])
 	ClockTestALU_ptr = &ALU::ClockTestALU;
 
 	RelayALU.SetupInterface();
+	RelayALU.ClockPeriod = 1000000 / clockfrequency;
 
 	// Parse assembly text file and load memory
-	const std::string SourceFile = "test.txt";
 	if (LoadProgram(MEMORY, SourceFile))
 	{
 		std::cout << "Error loading program. Exiting..." << std::endl;
@@ -1046,7 +1090,7 @@ int main(int argc, char* argv[])
 		std::cout << "ACC -> " << ACC_bits << " " << std::setfill('0') << std::setw(5) << std::dec << ACC << " " << std::setw(4) << std::hex << ACC << std::endl;
 		std::cout << std::endl;
 
-		pause();
+		if (clockfrequency == 0) pause();	
 
 	}
 
