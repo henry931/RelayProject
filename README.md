@@ -4,7 +4,8 @@ This repository contains files relating to a final year project, aimed at creati
 
 SOURCE Directory
 ----------------
-* ALU_Control contains a C++ program which simulates the [MU0] [1] processor, but uses the relay ALU for intrinsic instructions like ADD, XOR, etc. Input is in the form of a human-readable assembly text file. It uses [WiringPi] [2] Raspberry Pi access library for the serial interfacing.
+* ALU_Control contains a C++ program which simulates the [MU0] [1] processor, but uses the relay ALU for intrinsic instructions like ADD, XOR, etc. Input is in the form of a human-readable assembly text file. It uses [WiringPi] [2] Raspberry Pi access library for the serial interfacing. To compile on the Raspberry Pi:
+* ```g++ -std=c++11 -o ALU_CONTROL -lwiringPi -lcurses mainpi.cpp```
 * Matrix Generation produces every possible network matrix for a given set of nodes. The problem size is n! hard (number of solutions is the corresponding [Bell number] [3])
 * ProblemSize calculates the Bell number series
 * SimulationTesting is a program that reads in the CSV output of the LTspice Relay ALU simulation, and checks the results against the expected operation for that combinatorial state.
