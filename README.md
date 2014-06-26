@@ -18,7 +18,14 @@ LTspice.zip
 -----------
 Contains all LTspice designs and schematics for simulation purposes.
 
+YouTube Videos
+----------------
+* [General Test] [4]
+* [Fibonacci Sequence] [5]
+
 
   [1]: http://www.cs.man.ac.uk/~pjj/cs1001/arch/node1.html        "MU0"
   [2]: http://wiringpi.com/        "WiringPi"
   [3]: http://mathworld.wolfram.com/BellNumber.html        "Bell number"
+  [4]: https://www.youtube.com/watch?v=wcnkmPxOQRk "Relay ALU Test "
+  [5]: https://www.youtube.com/watch?v=6zoEzhqUzlg "Relay ALU Fibonacci Sequence "
